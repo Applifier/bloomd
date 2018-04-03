@@ -2,6 +2,7 @@
 #define BLOOM_CONFIG_H
 #include <stdint.h>
 #include <syslog.h>
+#include <sys/stat.h>
 
 /**
  * Stores our configuration
@@ -10,6 +11,8 @@ typedef struct {
     int tcp_port;
     int udp_port;
     char *bind_address;
+    char *unix_socket;
+    mode_t unix_socket_perm;
     char *data_dir;
     char *log_level;
     int syslog_log_level;

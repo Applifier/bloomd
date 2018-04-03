@@ -19,6 +19,8 @@ static const bloom_config DEFAULT_CONFIG = {
     8673,               // TCP defaults to 8673
     8674,               // UDP on 8674
     "0.0.0.0",          // Listen on all IPv4 addresses
+    NULL,               // By default do not use unix domain socket
+    0,                  // Socket permissions are not set by default
     "/tmp/bloomd",      // Tmp data dir, until configured
     "DEBUG",            // DEBUG level
     LOG_DEBUG,
@@ -138,7 +140,14 @@ static int config_callback(void* user, const char* section, const char* name, co
         config->log_level = strdup(value);
     } else if (NAME_MATCH("bind_address")) {
         config->bind_address = strdup(value);
-
+    } else if (NAME_MATCH("unix_socket")) {
+        config->unix_socket = strdup(value);
+    } else if (NAME_MATCH("unix_socket_perm")) {
+        config->unix_socket_perm = (mode_t)strtol(value, NULL, 8);
+        if (config->unix_socket_perm > 0777) {
+            syslog(LOG_ERR, "Invalid socket file permissions");
+            return 0;
+        }
     // Unknown parameter?
     } else {
         // Log it, but ignore
