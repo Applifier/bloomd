@@ -261,10 +261,6 @@ static int setup_unix_listener(bloom_networking *netconf) {
         return 1;
     }
 
-    if (netconf->config->unix_socket_perm) {
-        chmod(addr.sun_path, netconf->config->unix_socket_perm);
-    }
-
     // Create the libev objects
     ev_io_init(&netconf->unix_client, handle_new_unix_client,
                 unix_listener_fd, EV_READ);
@@ -376,7 +372,7 @@ int init_networking(bloom_config *config, bloom_filtmgr *mgr, bloom_networking *
     }
 
     // Setup the UDP listener
-    // res = setup_udp_listener(netconf);
+    res = setup_udp_listener(netconf);
     if (res != 0) {
         ev_io_stop(netconf->default_loop, &netconf->tcp_client);
         close(netconf->tcp_client.fd);
@@ -460,7 +456,7 @@ static void handle_new_unix_client(ev_loop *lp, ev_io *watcher, int ready_events
     }
 
     // Debug info
-    syslog(LOG_DEBUG, "Accepted client connection: %s %d [%d]",
+    syslog(LOG_DEBUG, "Accepted client connection: %s [%d]",
             client_addr.sun_path, client_fd);
 
     handle_new_client_accepted(netconf, client_fd);
@@ -782,11 +778,11 @@ void enter_main_loop(bloom_networking *netconf, int *should_run, pthread_t *thre
  */
 int shutdown_networking(bloom_networking *netconf, pthread_t *threads) {
     // Stop listening for new connections
-    // ev_io_stop(netconf->default_loop, &netconf->tcp_client);
-    // ev_io_stop(netconf->default_loop, &netconf->udp_client);
+    ev_io_stop(netconf->default_loop, &netconf->tcp_client);
+    ev_io_stop(netconf->default_loop, &netconf->udp_client);
     ev_io_stop(netconf->default_loop, &netconf->unix_client);
-    // close(netconf->tcp_client.fd);
-    // close(netconf->udp_client.fd);
+    close(netconf->tcp_client.fd);
+    close(netconf->udp_client.fd);
     close(netconf->unix_client.fd);
 
     // Tell the threads to quit, async signal
@@ -1065,12 +1061,6 @@ static int set_client_common_sockopts(int client_fd) {
         return 1;
     }
 
-    // Set keep alive
-    int flag = 1;
-    if(setsockopt(client_fd, SOL_SOCKET, SO_KEEPALIVE, &flag, sizeof(int))) {
-        syslog(LOG_WARNING, "Failed to set SO_KEEPALIVE on connection! %s.", strerror(errno));
-    }
-
     return 0;
 }
 
@@ -1086,6 +1076,11 @@ static int set_client_tcp_sockopts(int client_fd) {
     int flag = 1;
     if (setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int))) {
         syslog(LOG_WARNING, "Failed to set TCP_NODELAY on connection! %s.", strerror(errno));
+    }
+
+    // Set keep alive
+    if(setsockopt(client_fd, SOL_SOCKET, SO_KEEPALIVE, &flag, sizeof(int))) {
+        syslog(LOG_WARNING, "Failed to set SO_KEEPALIVE on connection! %s.", strerror(errno));
     }
 
     return 0;
