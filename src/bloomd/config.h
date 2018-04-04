@@ -12,7 +12,6 @@ typedef struct {
     int udp_port;
     char *bind_address;
     char *unix_socket;
-    mode_t unix_socket_perm;
     char *data_dir;
     char *log_level;
     int syslog_log_level;

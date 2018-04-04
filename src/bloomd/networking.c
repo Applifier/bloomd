@@ -261,10 +261,6 @@ static int setup_unix_listener(bloom_networking *netconf) {
         return 1;
     }
 
-    if (netconf->config->unix_socket_perm) {
-        chmod(addr.sun_path, netconf->config->unix_socket_perm);
-    }
-
     // Create the libev objects
     ev_io_init(&netconf->unix_client, handle_new_unix_client,
                 unix_listener_fd, EV_READ);
