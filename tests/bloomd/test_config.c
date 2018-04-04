@@ -15,6 +15,7 @@ START_TEST(test_config_get_default)
     fail_unless(res == 0);
     fail_unless(config.tcp_port == 8673);
     fail_unless(config.udp_port == 8674);
+    fail_unless(strcmp(config.unix_socket, "/tmp/bloomd_unix_socket") == 0);
     fail_unless(strcmp(config.data_dir, "/tmp/bloomd") == 0);
     fail_unless(strcmp(config.log_level, "DEBUG") == 0);
     fail_unless(config.syslog_log_level == LOG_DEBUG);
@@ -39,6 +40,7 @@ START_TEST(test_config_bad_file)
     // Should get the defaults...
     fail_unless(config.tcp_port == 8673);
     fail_unless(config.udp_port == 8674);
+    fail_unless(strcmp(config.unix_socket, "/tmp/bloomd_unix_socket") == 0);
     fail_unless(strcmp(config.data_dir, "/tmp/bloomd") == 0);
     fail_unless(strcmp(config.log_level, "DEBUG") == 0);
     fail_unless(config.syslog_log_level == LOG_DEBUG);
@@ -67,6 +69,7 @@ START_TEST(test_config_empty_file)
     // Should get the defaults...
     fail_unless(config.tcp_port == 8673);
     fail_unless(config.udp_port == 8674);
+    fail_unless(strcmp(config.unix_socket, "/tmp/bloomd_unix_socket") == 0);
     fail_unless(strcmp(config.data_dir, "/tmp/bloomd") == 0);
     fail_unless(strcmp(config.log_level, "DEBUG") == 0);
     fail_unless(config.syslog_log_level == LOG_DEBUG);
@@ -97,6 +100,7 @@ in_memory = 1\n\
 initial_capacity = 2000000\n\
 default_probability = 0.005\n\
 probability_reduction = 0.8\n\
+unix_socket = /tmp/test_unix_socket\n\
 data_dir = /tmp/test\n\
 workers = 2\n\
 use_mmap = 1\n\
@@ -112,6 +116,7 @@ log_level = INFO\n";
     // Should get the config
     fail_unless(config.tcp_port == 10000);
     fail_unless(config.udp_port == 10001);
+    fail_unless(strcmp(config.unix_socket, "/tmp/test_unix_socket") == 0);
     fail_unless(strcmp(config.data_dir, "/tmp/test") == 0);
     fail_unless(strcmp(config.log_level, "INFO") == 0);
     fail_unless(config.initial_capacity == 2000000);
