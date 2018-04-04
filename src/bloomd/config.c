@@ -19,7 +19,7 @@ static const bloom_config DEFAULT_CONFIG = {
     8673,               // TCP defaults to 8673
     8674,               // UDP on 8674
     "0.0.0.0",          // Listen on all IPv4 addresses
-    NULL,               // Path for unix domain socket is not specified, it is not used by default
+    "",                 // Path for unix domain socket is not specified, it is not used by default
     "/tmp/bloomd",      // Tmp data dir, until configured
     "DEBUG",            // DEBUG level
     LOG_DEBUG,
