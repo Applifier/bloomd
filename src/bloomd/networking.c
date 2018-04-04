@@ -1061,12 +1061,6 @@ static int set_client_common_sockopts(int client_fd) {
         return 1;
     }
 
-    // Set keep alive
-    int flag = 1;
-    if(setsockopt(client_fd, SOL_SOCKET, SO_KEEPALIVE, &flag, sizeof(int))) {
-        syslog(LOG_WARNING, "Failed to set SO_KEEPALIVE on connection! %s.", strerror(errno));
-    }
-
     return 0;
 }
 
@@ -1082,6 +1076,11 @@ static int set_client_tcp_sockopts(int client_fd) {
     int flag = 1;
     if (setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int))) {
         syslog(LOG_WARNING, "Failed to set TCP_NODELAY on connection! %s.", strerror(errno));
+    }
+
+    // Set keep alive
+    if(setsockopt(client_fd, SOL_SOCKET, SO_KEEPALIVE, &flag, sizeof(int))) {
+        syslog(LOG_WARNING, "Failed to set SO_KEEPALIVE on connection! %s.", strerror(errno));
     }
 
     return 0;
