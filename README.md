@@ -117,6 +117,8 @@ Each configuration option is documented below:
 
  * bind\_address: The IP to bind to. Defaults to 0.0.0.0
 
+ * unix\_socket : Path to unix domain socket as string. Default is empty, means socket support disabled.
+
  * data\_dir : The data directory that is used. Defaults to /tmp/bloomd
 
  * log\_level : The logging level that bloomd should use. One of:

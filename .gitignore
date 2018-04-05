@@ -10,3 +10,5 @@ test_libbloom_runner
 test_bloomd_runner
 .vagrant
 *.pyc
+bloomd
+bloomd.conf
