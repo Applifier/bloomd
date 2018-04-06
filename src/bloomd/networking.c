@@ -15,6 +15,7 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <sys/un.h>
 #include <pthread.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -137,6 +138,7 @@ struct bloom_networking {
     ev_loop *default_loop;
     ev_io tcp_client;
     ev_io udp_client;
+    ev_io unix_client;
 
     barrier_t thread_barrier;
     pthread_t *threads; // Reference to all the workers
@@ -146,7 +148,9 @@ struct bloom_networking {
 
 
 // Static typedefs
-static void handle_new_client(ev_loop *lp, ev_io *watcher, int ready_events);
+static void handle_new_tcp_client(ev_loop *lp, ev_io *watcher, int ready_events);
+static void handle_new_unix_client(ev_loop *lp, ev_io *watcher, int ready_events);
+static void handle_new_client_accepted(bloom_networking *netconf, int client_fd);
 static void handle_new_udp_mesg(ev_loop *lp, ev_io *watcher, int ready_events);
 static void invoke_event_handler(ev_loop *lp, ev_io *watcher, int ready_events);
 static void handle_client_writebuf(ev_loop *lp, ev_io *watcher, int ready_events);
@@ -163,7 +167,8 @@ static int send_client_response_direct(conn_info *conn, char **response_buffers,
 
 
 // Utility methods
-static int set_client_sockopts(int client_fd);
+static int set_client_common_sockopts(int client_fd);
+static int set_client_tcp_sockopts(int client_fd);
 static conn_info* get_conn();
 
 
@@ -219,9 +224,46 @@ static int setup_tcp_listener(bloom_networking *netconf) {
     }
 
     // Create the libev objects
-    ev_io_init(&netconf->tcp_client, handle_new_client,
+    ev_io_init(&netconf->tcp_client, handle_new_tcp_client,
                 tcp_listener_fd, EV_READ);
     ev_io_start(netconf->default_loop, &netconf->tcp_client);
+    return 0;
+}
+
+/**
+ * Initializes the Unix domain socket listener 
+ * @arg netconf The network configuration
+ * @return 0 on success.
+ */
+static int setup_unix_listener(bloom_networking *netconf) {
+    struct sockaddr_un addr;
+    int unix_listener_fd;
+
+    bzero(&addr, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, netconf->config->unix_socket, sizeof(addr.sun_path) - 1);
+
+    unlink(netconf->config->unix_socket);
+
+    if ((unix_listener_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+        syslog(LOG_ERR, "Failed create UNIX socket! Err: %s", strerror(errno));
+        return 1;
+    }
+    if (bind(unix_listener_fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
+        syslog(LOG_ERR, "Failed to bind on UNIX socket! Err: %s", strerror(errno));
+        close(unix_listener_fd);
+        return 1;
+    }
+    if (listen(unix_listener_fd, BACKLOG_SIZE) != 0) {
+        syslog(LOG_ERR, "Failed to listen on UNIX socket! Err: %s", strerror(errno));
+        close(unix_listener_fd);
+        return 1;
+    }
+
+    // Create the libev objects
+    ev_io_init(&netconf->unix_client, handle_new_unix_client,
+                unix_listener_fd, EV_READ);
+    ev_io_start(netconf->default_loop, &netconf->unix_client);
     return 0;
 }
 
@@ -319,6 +361,15 @@ int init_networking(bloom_config *config, bloom_filtmgr *mgr, bloom_networking *
         return 1;
     }
 
+    // Setup the unix listener
+    if (strcmp(config->unix_socket, "") != 0) {
+        int res = setup_unix_listener(netconf);
+        if (res != 0) {
+            free(netconf);
+            return 1;
+        }
+    }
+
     // Setup the UDP listener
     res = setup_udp_listener(netconf);
     if (res != 0) {
@@ -343,13 +394,13 @@ int init_networking(bloom_config *config, bloom_filtmgr *mgr, bloom_networking *
  * the connection buffers, and prepares to start listening
  * for client data
  */
-static void handle_new_client(ev_loop *lp, ev_io *watcher, int ready_events) {
+static void handle_new_tcp_client(ev_loop *lp, ev_io *watcher, int ready_events) {
     // Get the network configuration
     bloom_networking *netconf = ev_userdata(lp);
 
     // Accept the client connection
     struct sockaddr_in client_addr;
-    int client_addr_len = sizeof(client_addr);
+    socklen_t client_addr_len = sizeof(client_addr);
     int client_fd = accept(watcher->fd,
                         (struct sockaddr*)&client_addr,
                         &client_addr_len);
@@ -361,7 +412,10 @@ static void handle_new_client(ev_loop *lp, ev_io *watcher, int ready_events) {
     }
 
     // Setup the socket
-    if (set_client_sockopts(client_fd)) {
+    if (set_client_common_sockopts(client_fd)) {
+        return;
+    }
+    if (set_client_tcp_sockopts(client_fd)) {
         return;
     }
 
@@ -369,6 +423,48 @@ static void handle_new_client(ev_loop *lp, ev_io *watcher, int ready_events) {
     syslog(LOG_DEBUG, "Accepted client connection: %s %d [%d]",
             inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port), client_fd);
 
+    handle_new_client_accepted(netconf, client_fd);
+}
+
+/**
+ * Invoked when a Unix listening socket fd is ready
+ * to accept a new client. Accepts the client, initializes
+ * the connection buffers, and prepares to start listening
+ * for client data
+ */
+static void handle_new_unix_client(ev_loop *lp, ev_io *watcher, int ready_events) {
+    // Get the network configuration
+    bloom_networking *netconf = ev_userdata(lp);
+
+    // Accept the client connection
+    struct sockaddr_un client_addr;
+    socklen_t client_addr_len = sizeof(client_addr);
+    int client_fd = accept(watcher->fd,
+                        (struct sockaddr*)&client_addr,
+                        &client_addr_len);
+
+    // Check for an error
+    if (client_fd == -1) {
+        syslog(LOG_ERR, "Failed to accept() connection! %s.", strerror(errno));
+        return;
+    }
+
+    // Setup the socket
+    if (set_client_common_sockopts(client_fd)) {
+        return;
+    }
+
+    // Debug info
+    syslog(LOG_DEBUG, "Accepted client connection: %s [%d]",
+            client_addr.sun_path, client_fd);
+
+    handle_new_client_accepted(netconf, client_fd);
+}
+
+/**
+ * Invoked when client is accepted and prepares to start listening for client data
+ */
+static void handle_new_client_accepted(bloom_networking *netconf, int client_fd) {
     // Get the associated conn object
     conn_info *conn = get_conn();
 
@@ -683,8 +779,10 @@ int shutdown_networking(bloom_networking *netconf, pthread_t *threads) {
     // Stop listening for new connections
     ev_io_stop(netconf->default_loop, &netconf->tcp_client);
     ev_io_stop(netconf->default_loop, &netconf->udp_client);
+    ev_io_stop(netconf->default_loop, &netconf->unix_client);
     close(netconf->tcp_client.fd);
     close(netconf->udp_client.fd);
+    close(netconf->unix_client.fd);
 
     // Tell the threads to quit, async signal
     for (int i=0; i < netconf->config->worker_threads; i++) {
@@ -948,7 +1046,7 @@ int extract_to_terminator(bloom_conn_info *conn, char terminator, char **buf, in
  * Sets the client socket options.
  * @return 0 on success, 1 on error.
  */
-static int set_client_sockopts(int client_fd) {
+static int set_client_common_sockopts(int client_fd) {
     // Setup the socket to be non-blocking
     int sock_flags = fcntl(client_fd, F_GETFL, 0);
     if (sock_flags < 0) {
@@ -962,6 +1060,14 @@ static int set_client_sockopts(int client_fd) {
         return 1;
     }
 
+    return 0;
+}
+
+/**
+ * Sets the client socket options that are specific for tcp connection.
+ * @return 0 on success, 1 on error.
+ */
+static int set_client_tcp_sockopts(int client_fd) {
     /**
      * Set TCP_NODELAY. This will allow us to send small response packets more
      * quickly, since our responses are rarely large enough to consume a packet.
