@@ -365,7 +365,7 @@ int init_networking(bloom_config *config, bloom_filtmgr *mgr, bloom_networking *
     }
 
     // Setup the unix listener
-    if (config->unix_socket != "") {
+    if (strcmp(config->unix_socket, "") != 0) {
         int res = setup_unix_listener(netconf);
         if (res != 0) {
             free(netconf);
@@ -403,7 +403,7 @@ static void handle_new_tcp_client(ev_loop *lp, ev_io *watcher, int ready_events)
 
     // Accept the client connection
     struct sockaddr_in client_addr;
-    int client_addr_len = sizeof(client_addr);
+    socklen_t client_addr_len = sizeof(client_addr);
     int client_fd = accept(watcher->fd,
                         (struct sockaddr*)&client_addr,
                         &client_addr_len);
