@@ -243,10 +243,7 @@ static int setup_unix_listener(bloom_networking *netconf) {
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, netconf->config->unix_socket, sizeof(addr.sun_path) - 1);
 
-    if(unlink(netconf->config->unix_socket) == -1) {
-        syslog(LOG_ERR, "Failed to unlink UNIX socket! Err: %s", strerror(errno));
-        return 1;
-    }
+    unlink(netconf->config->unix_socket);
 
     if ((unix_listener_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         syslog(LOG_ERR, "Failed create UNIX socket! Err: %s", strerror(errno));

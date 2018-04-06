@@ -1,24 +1,27 @@
 import platform
 plat = platform.system()
 
-envspooky = Environment(CPPPATH = ['deps/spookyhash/'], CPPFLAGS="-fno-exceptions -O2")
+# -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free
+# -g
+
+envspooky = Environment(CPPPATH = ['deps/spookyhash/'], CPPFLAGS="-g -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free -fno-exceptions -O2")
 spooky = envspooky.Library('spooky', Glob("deps/spookyhash/*.cpp"))
 
-envmurmur = Environment(CPPPATH = ['deps/murmurhash/'], CPPFLAGS="-fno-exceptions -O2")
+envmurmur = Environment(CPPPATH = ['deps/murmurhash/'], CPPFLAGS="-g -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free -fno-exceptions -O2")
 murmur = envmurmur.Library('murmur', Glob("deps/murmurhash/*.cpp"))
 
-envbloom = Environment(CCFLAGS = '-std=c99 -Wall -Werror -Wextra -O2 -D_GNU_SOURCE')
+envbloom = Environment(CCFLAGS = '-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free -g -std=c99 -Wall -Werror -Wextra -O2 -D_GNU_SOURCE')
 bloom = envbloom.Library('bloom', Glob("src/libbloom/*.c"), LIBS=[murmur, spooky])
 
-envtest = Environment(CCFLAGS = '-std=c99 -Wall -Werror -Wextra -Wno-unused-function -D_GNU_SOURCE -Isrc/libbloom/')
+envtest = Environment(CCFLAGS = '-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free -g -std=c99 -Wall -Werror -Wextra -Wno-unused-function -D_GNU_SOURCE -Isrc/libbloom/')
 envtest.Program('test_libbloom_runner', Glob("tests/libbloom/*.c"), LIBS=["check", bloom, murmur, spooky, "m"])
 
-envinih = Environment(CPATH = ['deps/inih/'], CFLAGS="-O2")
+envinih = Environment(CPATH = ['deps/inih/'], CFLAGS="-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free -g -O2")
 inih = envinih.Library('inih', Glob("deps/inih/*.c"))
 
-envbloomd_with_err = Environment(CCFLAGS = '-std=c99 -D_GNU_SOURCE -Wall -Wextra -Werror -O2 -pthread -Isrc/bloomd/ -Ideps/inih/ -Ideps/libev/ -Isrc/libbloom/')
-envbloomd_without_unused_err = Environment(CCFLAGS = '-std=c99 -D_GNU_SOURCE -Wall -Wextra -Wno-unused-function -Wno-unused-result -Werror -O2 -pthread -Isrc/bloomd/ -Ideps/inih/ -Ideps/libev/ -Isrc/libbloom/')
-envbloomd_without_err = Environment(CCFLAGS = '-std=c99 -D_GNU_SOURCE -O2 -pthread -Isrc/bloomd/ -Ideps/inih/ -Ideps/libev/ -Isrc/libbloom/')
+envbloomd_with_err = Environment(CCFLAGS = '-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free -g -std=c99 -D_GNU_SOURCE -Wall -Wextra -Werror -O2 -pthread -Isrc/bloomd/ -Ideps/inih/ -Ideps/libev/ -Isrc/libbloom/')
+envbloomd_without_unused_err = Environment(CCFLAGS = '-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free -g -std=c99 -D_GNU_SOURCE -Wall -Wextra -Wno-unused-function -Wno-unused-result -Werror -O2 -pthread -Isrc/bloomd/ -Ideps/inih/ -Ideps/libev/ -Isrc/libbloom/')
+envbloomd_without_err = Environment(CCFLAGS = '-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free -g -std=c99 -D_GNU_SOURCE -O2 -pthread -Isrc/bloomd/ -Ideps/inih/ -Ideps/libev/ -Isrc/libbloom/')
 
 objs =  envbloomd_with_err.Object('src/bloomd/config', 'src/bloomd/config.c') + \
         envbloomd_without_err.Object('src/bloomd/networking', 'src/bloomd/networking.c') + \
@@ -29,7 +32,7 @@ objs =  envbloomd_with_err.Object('src/bloomd/config', 'src/bloomd/config.c') + 
         envbloomd_with_err.Object('src/bloomd/background', 'src/bloomd/background.c') + \
         envbloomd_with_err.Object('src/bloomd/art', 'src/bloomd/art.c')
 
-bloom_libs = ["tcmalloc", "pthread", bloom, murmur, inih, spooky, "m"]
+bloom_libs = ["profiler", "tcmalloc", "pthread", bloom, murmur, inih, spooky, "m"]
 if plat == 'Linux':
    bloom_libs.append("rt")
 
