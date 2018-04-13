@@ -41,6 +41,9 @@
 /**
  * Default listen backlog size for
  * our UNIX listener.
+ * Because TCP backlog could actually contain already estabilished connections,
+ * and actual buffer for pending TCP connections is much larger it is make sense to have
+ * a different backlog for unix socket. Probably it make sense to just use the SOMAXCONN value here.
  */
 #define UNIX_BACKLOG_SIZE 128
 
