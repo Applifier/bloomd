@@ -36,7 +36,13 @@
  * Default listen backlog size for
  * our TCP listener.
  */
-#define BACKLOG_SIZE 64
+#define TCP_BACKLOG_SIZE 64
+
+/**
+ * Default listen backlog size for
+ * our UNIX listener.
+ */
+#define UNIX_BACKLOG_SIZE 128
 
 /**
  * How big should the default connection
@@ -167,7 +173,7 @@ static int send_client_response_direct(conn_info *conn, char **response_buffers,
 
 
 // Utility methods
-static int set_client_common_sockopts(int client_fd);
+static int set_non_blocking(int client_fd);
 static int set_client_tcp_sockopts(int client_fd);
 static conn_info* get_conn();
 
@@ -217,7 +223,7 @@ static int setup_tcp_listener(bloom_networking *netconf) {
         close(tcp_listener_fd);
         return 1;
     }
-    if (listen(tcp_listener_fd, BACKLOG_SIZE) != 0) {
+    if (listen(tcp_listener_fd, TCP_BACKLOG_SIZE) != 0) {
         syslog(LOG_ERR, "Failed to listen on TCP socket! Err: %s", strerror(errno));
         close(tcp_listener_fd);
         return 1;
@@ -254,9 +260,14 @@ static int setup_unix_listener(bloom_networking *netconf) {
         close(unix_listener_fd);
         return 1;
     }
-    if (listen(unix_listener_fd, BACKLOG_SIZE) != 0) {
+    if (listen(unix_listener_fd, UNIX_BACKLOG_SIZE) != 0) {
         syslog(LOG_ERR, "Failed to listen on UNIX socket! Err: %s", strerror(errno));
         close(unix_listener_fd);
+        return 1;
+    }
+    
+    // Setup the socket
+    if (set_non_blocking(unix_listener_fd)) {
         return 1;
     }
 
@@ -412,7 +423,7 @@ static void handle_new_tcp_client(ev_loop *lp, ev_io *watcher, int ready_events)
     }
 
     // Setup the socket
-    if (set_client_common_sockopts(client_fd)) {
+    if (set_non_blocking(client_fd)) {
         return;
     }
     if (set_client_tcp_sockopts(client_fd)) {
@@ -450,7 +461,7 @@ static void handle_new_unix_client(ev_loop *lp, ev_io *watcher, int ready_events
     }
 
     // Setup the socket
-    if (set_client_common_sockopts(client_fd)) {
+    if (set_non_blocking(client_fd)) {
         return;
     }
 
@@ -1041,22 +1052,21 @@ int extract_to_terminator(bloom_conn_info *conn, char terminator, char **buf, in
     return ((term_addr) ? 0 : -1);
 }
 
-
 /**
- * Sets the client socket options.
+ * Sets the socket to non blocking mode.
  * @return 0 on success, 1 on error.
  */
-static int set_client_common_sockopts(int client_fd) {
+static int set_non_blocking(int fd) {
     // Setup the socket to be non-blocking
-    int sock_flags = fcntl(client_fd, F_GETFL, 0);
+    int sock_flags = fcntl(fd, F_GETFL, 0);
     if (sock_flags < 0) {
         syslog(LOG_ERR, "Failed to get socket flags on connection! %s.", strerror(errno));
-        close(client_fd);
+        close(fd);
         return 1;
     }
-    if (fcntl(client_fd, F_SETFL, sock_flags | O_NONBLOCK)) {
+    if (fcntl(fd, F_SETFL, sock_flags | O_NONBLOCK)) {
         syslog(LOG_ERR, "Failed to set O_NONBLOCK on connection! %s.", strerror(errno));
-        close(client_fd);
+        close(fd);
         return 1;
     }
 
